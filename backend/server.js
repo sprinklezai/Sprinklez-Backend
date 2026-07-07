@@ -4,6 +4,7 @@ const cors = require("cors");
 
 const authRoutes = require("./routes/authRoutes");
 const overviewRoutes = require("./routes/overviewRoutes");
+const brandRoutes = require("./routes/brandRoutes");
 const dataRoutes = require("./routes/dataRoutes");
 
 
@@ -40,6 +41,7 @@ app.get("/", (req, res) => {
 
 app.use("/api", authRoutes);
 app.use("/api", overviewRoutes);
+app.use("/api", brandRoutes);
 app.use("/api", dataRoutes);
 
 /*
