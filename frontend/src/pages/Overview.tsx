@@ -16,6 +16,7 @@ import { getOverview } from "../api/overview";
 import KpiCard from "../components/widgets/KpiCard";
 import BrandCard from "../components/widgets/BrandCard";
 import PieChartCard from "../components/widgets/PieChartCard";
+import BarChartCard from "../components/widgets/BarChartCard";
 
 const brandLogoMap: Record<string, string> = {
   ALB: "/brand-logos/allo-beirut.png",
@@ -67,7 +68,6 @@ function Overview() {
   const brandCards = overview?.brandSummary || [];
   const topBrands = overview?.topBrandsByStores || [];
   const countrySummary = overview?.countrySummary || [];
-  const companySummary = overview?.companySummary || [];
 
   const activePercent =
     kpis.stores > 0 ? Math.round((kpis.activeStores / kpis.stores) * 100) : 0;
@@ -199,7 +199,7 @@ function Overview() {
             </div>
           </section>
 
-          <section className="mt-8 grid gap-6 lg:grid-cols-3">
+          <section className="mt-8 grid gap-6 lg:grid-cols-2">
             <PieChartCard
               title="Country Contribution"
               data={countrySummary.map((item: any) => ({
@@ -208,58 +208,13 @@ function Overview() {
               }))}
             />
 
-            <PieChartCard
-              title="Brand Contribution"
+            <BarChartCard
+              title="Brand Contribution by Store Count"
               data={topBrands.slice(0, 8).map((item: any) => ({
                 name: item.brand_name,
                 value: item.stores,
               }))}
             />
-
-            <PieChartCard
-              title="Company Contribution"
-              data={companySummary.map((item: any) => ({
-                name: item.company_name,
-                value: item.stores,
-              }))}
-            />
-          </section>
-
-          <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h3 className="font-bold text-slate-900">
-              Top Brands by Store Count
-            </h3>
-
-            <div className="mt-5 space-y-4">
-              {topBrands.slice(0, 8).map((brand: any) => (
-                <div key={brand.brand_code}>
-                  <div className="mb-1 flex justify-between text-sm">
-                    <span className="font-medium text-slate-700">
-                      {brand.brand_name}
-                    </span>
-                    <span className="font-semibold text-slate-900">
-                      {brand.stores}
-                    </span>
-                  </div>
-
-                  <div className="h-2 rounded-full bg-slate-100">
-                    <div
-                      className="h-2 rounded-full bg-blue-600"
-                      style={{
-                        width: `${
-                          kpis.stores > 0
-                            ? Math.min(
-                                100,
-                                (brand.stores / kpis.stores) * 100
-                              )
-                            : 0
-                        }%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
           </section>
         </>
       )}
