@@ -23,10 +23,11 @@ const COLORS = [
   "#dc2626",
   "#0891b2",
   "#ca8a04",
+  "#64748b",
 ];
 
 function PieChartCard({ title, data }: PieChartCardProps) {
-  const total = data.reduce((sum, item) => sum + item.value, 0);
+  const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -46,18 +47,22 @@ function PieChartCard({ title, data }: PieChartCardProps) {
               paddingAngle={3}
             >
               {data.map((_, index) => (
-                <Cell
-                  key={index}
-                  fill={COLORS[index % COLORS.length]}
-                />
+                <Cell key={index} fill={COLORS[index % COLORS.length]} />
               ))}
             </Pie>
 
             <Tooltip
-              formatter={(value: number) => [
-                `${value} stores (${total ? Math.round((value / total) * 100) : 0}%)`,
-                "Contribution",
-              ]}
+              formatter={(value) => {
+                const numericValue = Number(value || 0);
+                const percent = total
+                  ? Math.round((numericValue / total) * 100)
+                  : 0;
+
+                return [
+                  `${numericValue} stores (${percent}%)`,
+                  "Contribution",
+                ];
+              }}
             />
 
             <Legend />
