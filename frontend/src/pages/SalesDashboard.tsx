@@ -95,7 +95,19 @@ const money = (value: number) =>
     averageDailySalesPerOutlet: 0,
   };
 
-  const brandName = salesData?.brandName || salesData?.brandCode || code;
+ const brandName =
+  salesData?.brandName ||
+  {
+    SLI: "Sushi Library",
+    WSP: "Wingstop",
+    ALB: "Allo Beirut",
+    NAN: "Nando's",
+    CSC: "Cold Stone Creamery",
+    JMP: "Jamie's Pizzeria",
+    JMT: "Jamie's Italian",
+    MCC: "Molten Chocolate Café",
+  }[code] ||
+  code;
 
   const revenueTrend =
     salesData?.revenueTrend?.map((item: any) => ({

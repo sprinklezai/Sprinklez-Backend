@@ -1,6 +1,8 @@
+const { downloadSalesZipFromDrive } = require("./googleDriveSalesService");
 const AdmZip = require("adm-zip");
 const { parse } = require("csv-parse/sync");
 const { getData } = require("./excelService");
+
 
 const SALES_BASE_URL =
   process.env.SALES_BASE_URL ||
@@ -29,22 +31,7 @@ function parseDate(value) {
 }
 
 async function downloadZip(month = "2026_06") {
-  const url = `${SALES_BASE_URL}/${month}_sales.zip`;
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      Accept: "application/zip,*/*",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Download failed (${response.status}) : ${url}`);
-  }
-
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  return await downloadSalesZipFromDrive(month);
 }
 
 function buildStoreLookup() {
