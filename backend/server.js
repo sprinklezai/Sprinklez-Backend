@@ -7,6 +7,7 @@ const overviewRoutes = require("./routes/overviewRoutes");
 const brandRoutes = require("./routes/brandRoutes");
 const dataRoutes = require("./routes/dataRoutes");
 const salesRoutes = require("./routes/salesRoutes");
+const testRoutes = require("./routes/testRoutes");
 
 
 const app = express();
@@ -45,6 +46,7 @@ app.use("/api", overviewRoutes);
 app.use("/api", brandRoutes);
 app.use("/api", salesRoutes);
 app.use("/api", dataRoutes);
+app.use("/api", testRoutes);
 
 /*
 |--------------------------------------------------------------------------
