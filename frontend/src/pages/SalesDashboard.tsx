@@ -434,13 +434,13 @@ function ItemTable({ title, data, formatMoney, formatNumber }: any) {
       <h3 className="text-base font-bold text-stone-900">{title}</h3>
 
       <div className="mt-4 overflow-x-auto">
-        <table className="w-full text-left text-sm">
+        <table className="w-full min-w-[720px] text-left text-sm">
           <thead>
             <tr className="border-b border-stone-200 text-xs uppercase tracking-wider text-stone-400">
               <th className="w-12 py-3">#</th>
               <th className="py-3">Item Description</th>
               <th className="w-24 py-3 text-right">Qty</th>
-              <th className="w-32 py-3 text-right">Revenue</th>
+              <th className="w-36 py-3 text-right">Revenue</th>
             </tr>
           </thead>
 
@@ -451,17 +451,15 @@ function ItemTable({ title, data, formatMoney, formatNumber }: any) {
                   {String(index + 1).padStart(2, "0")}
                 </td>
 
-                <td className="max-w-[360px] py-4 font-semibold text-stone-900">
-                  <div className="line-clamp-2">
-                    {item.item_description || "Unknown Item"}
-                  </div>
+                <td className="py-4 font-semibold text-stone-900">
+                  {item.item_description || item.item_no || "Unknown Item"}
                 </td>
 
                 <td className="py-4 text-right text-stone-600">
                   {formatNumber(item.quantity)}
                 </td>
 
-                <td className="py-4 text-right font-bold text-stone-900">
+                <td className="rounded-r-xl py-4 text-right font-bold text-stone-900">
                   {formatMoney(item.net_sales)}
                 </td>
               </tr>
