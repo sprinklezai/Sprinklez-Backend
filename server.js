@@ -19,13 +19,26 @@ const app = express();
 |--------------------------------------------------------------------------
 */
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "https://webapp.sprinkleztrading.com",
+  "https://api.sprinkleztrading.com",
+];
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-      "https://fandb-sprinklez-dashboard-live.onrender.com",
-    ],
+    origin(origin, callback) {
+      // Allow Postman/server-to-server requests
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.log("Blocked Origin:", origin);
+      return callback(new Error("CORS not allowed"));
+    },
     credentials: true,
   })
 );
