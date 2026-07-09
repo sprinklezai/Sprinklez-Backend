@@ -13,14 +13,15 @@ function getPrivateKey() {
 }
 
 function getDriveClient() {
+
+  console.log("CLIENT EMAIL:", process.env.GOOGLE_CLIENT_EMAIL);
+  console.log("FOLDER ID:", process.env.GOOGLE_DRIVE_SALES_FOLDER_ID);
+  console.log("PRIVATE KEY EXISTS:", !!process.env.GOOGLE_PRIVATE_KEY);
+
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
 
   if (!clientEmail) {
     throw new Error("GOOGLE_CLIENT_EMAIL is missing");
-  }
-
-  if (!SALES_FOLDER_ID) {
-    throw new Error("GOOGLE_DRIVE_SALES_FOLDER_ID is missing");
   }
 
   const auth = new google.auth.JWT({
