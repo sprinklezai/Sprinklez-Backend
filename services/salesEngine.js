@@ -1,5 +1,6 @@
-const AdmZip = require("adm-zip");
-const { parse } = require("csv-parse/sync");
+const unzipper = require("unzipper");
+const { parse } = require("csv-parse");
+const { Readable } = require("stream");
 const { getData } = require("./excelService");
 const { loadSalesZip } = require("./fileStorageService");
 
@@ -84,28 +85,36 @@ function buildStoreLookup() {
   return storeMap;
 }
 
-function parseZipCsv(buffer) {
-  const zip = new AdmZip(buffer);
-  const entries = zip.getEntries();
+async function parseZipCsv(zipBuffer) {
+  const allRows = [];
 
-  let allRows = [];
+  const zipStream = Readable.from([zipBuffer]).pipe(
+    unzipper.Parse({ forceStream: true })
+  );
 
-  entries.forEach((entry) => {
-    if (!entry.entryName.toLowerCase().endsWith(".csv")) return;
+  for await (const entry of zipStream) {
+    const fileName = String(entry.path || "").toLowerCase();
 
-    const csvText = entry.getData().toString("utf8");
+    if (!fileName.endsWith(".csv")) {
+      entry.autodrain();
+      continue;
+    }
 
-    const rows = parse(csvText, {
-      columns: true,
-      skip_empty_lines: true,
-      bom: true,
-      relax_quotes: true,
-      relax_column_count: true,
-      trim: true,
-    });
+    const csvParser = entry.pipe(
+      parse({
+        columns: true,
+        skip_empty_lines: true,
+        bom: true,
+        relax_quotes: true,
+        relax_column_count: true,
+        trim: true,
+      })
+    );
 
-    allRows = allRows.concat(rows);
-  });
+    for await (const row of csvParser) {
+      allRows.push(row);
+    }
+  }
 
   return allRows;
 }
@@ -116,7 +125,7 @@ async function loadSalesMonth(month = "2026_06", forceRefresh = false) {
   }
 
   const zipBuffer = await loadSalesZip(month);
-  const rawRows = parseZipCsv(zipBuffer);
+  const rawRows = await parseZipCsv(zipBuffer);
   const storeLookup = buildStoreLookup();
 
   const rows = rawRows

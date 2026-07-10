@@ -2,7 +2,13 @@ const xlsx = require("xlsx");
 const path = require("path");
 const fs = require("fs");
 
-const mastersDir = path.join(__dirname, "../../data/masters");
+const mastersDir =
+  process.env.MASTERS_DATA_PATH ||
+  path.join(__dirname, "..", "data", "masters");
+
+console.log("MASTERS_DATA_PATH env:", process.env.MASTERS_DATA_PATH);
+console.log("Resolved mastersDir:", mastersDir);
+console.log("excelService file:", __filename);
 
 const fileMap = {
   brands: "Brand_Master.xlsx",
@@ -25,11 +31,14 @@ function readExcel(fileName) {
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
 
-  return xlsx.utils.sheet_to_json(sheet);
+  return xlsx.utils.sheet_to_json(sheet, {
+    defval: "",
+  });
 }
 
 function getData(type) {
-  const fileName = fileMap[type];
+  const normalizedType = String(type || "").trim().toLowerCase();
+  const fileName = fileMap[normalizedType];
 
   if (!fileName) {
     throw new Error(`Invalid data type: ${type}`);
