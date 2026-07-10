@@ -86,7 +86,12 @@ function getPeriodDays(daily, period) {
   return sortedDays;
 }
 
-function aggregateFilteredDays(days, country, storeCode, search) {
+function aggregateFilteredDays(
+  days,
+  country,
+  storeCode,
+  search
+) {
   const normalizedCountry = normalize(country);
   const normalizedStore = String(storeCode || "").trim();
   const normalizedSearch = normalize(search);
@@ -94,8 +99,8 @@ function aggregateFilteredDays(days, country, storeCode, search) {
   let netRevenue = 0;
   let discounts = 0;
   let itemsSold = 0;
+  let orders = 0;
 
-  const receiptKeys = new Set();
   const dates = new Set();
 
   const countryMap = new Map();
@@ -123,10 +128,16 @@ function aggregateFilteredDays(days, country, storeCode, search) {
         continue;
       }
 
-      netRevenue += Number(store.net_sales || 0);
-      discounts += Number(store.discounts || 0);
-      itemsSold += Number(store.quantity || 0);
-      dayRevenue += Number(store.net_sales || 0);
+      const storeRevenue = Number(store.net_sales || 0);
+      const storeDiscount = Number(store.discounts || 0);
+      const storeQuantity = Number(store.quantity || 0);
+      const storeOrders = Number(store.orders || 0);
+
+      netRevenue += storeRevenue;
+      discounts += storeDiscount;
+      itemsSold += storeQuantity;
+      orders += storeOrders;
+      dayRevenue += storeRevenue;
 
       dates.add(day.date);
 
@@ -149,27 +160,69 @@ function aggregateFilteredDays(days, country, storeCode, search) {
 
       const aggregateStore = storeMap.get(storeKey);
 
-      aggregateStore.net_sales += Number(store.net_sales || 0);
-      aggregateStore.discounts += Number(store.discounts || 0);
-      aggregateStore.quantity += Number(store.quantity || 0);
-      aggregateStore.orders += Number(store.orders || 0);
+      aggregateStore.net_sales += storeRevenue;
+      aggregateStore.discounts += storeDiscount;
+      aggregateStore.quantity += storeQuantity;
+      aggregateStore.orders += storeOrders;
 
       countryMap.set(
         store.country_name,
         (countryMap.get(store.country_name) || 0) +
-          Number(store.net_sales || 0)
+          storeRevenue
       );
 
       companyMap.set(
         store.company_name,
         (companyMap.get(store.company_name) || 0) +
-          Number(store.net_sales || 0)
+          storeRevenue
       );
 
-      // Daily summaries contain order counts, not receipt numbers.
-      for (let index = 0; index < Number(store.orders || 0); index += 1) {
-        receiptKeys.add(
-          `${day.date}|${store.store_code}|${index}`
+      // Filter-aware channel mix
+      for (const channel of store.sales_types || []) {
+        const channelName = channel.name || "UNKNOWN";
+
+        salesTypeMap.set(
+          channelName,
+          (salesTypeMap.get(channelName) || 0) +
+            Number(channel.value || 0)
+        );
+      }
+
+      // Filter-aware item ranking
+      for (const item of store.items || []) {
+        const itemLabel =
+          item.item_description ||
+          item.item_no ||
+          "Unknown Item";
+
+        if (
+          normalizedSearch &&
+          !normalize(itemLabel).includes(normalizedSearch)
+        ) {
+          continue;
+        }
+
+        const itemKey = String(
+          item.item_no || itemLabel
+        );
+
+        if (!itemMap.has(itemKey)) {
+          itemMap.set(itemKey, {
+            item_no: item.item_no,
+            item_description: itemLabel,
+            quantity: 0,
+            net_sales: 0,
+          });
+        }
+
+        const aggregateItem = itemMap.get(itemKey);
+
+        aggregateItem.quantity += Number(
+          item.quantity || 0
+        );
+
+        aggregateItem.net_sales += Number(
+          item.net_sales || 0
         );
       }
     }
@@ -177,58 +230,26 @@ function aggregateFilteredDays(days, country, storeCode, search) {
     if (dayRevenue > 0) {
       revenueTrend.set(day.date, dayRevenue);
     }
-
-    if (!normalizedStore && !normalizedCountry) {
-      for (const mix of day.sales_types || []) {
-        salesTypeMap.set(
-          mix.name,
-          (salesTypeMap.get(mix.name) || 0) +
-            Number(mix.value || 0)
-        );
-      }
-    }
-
-    for (const item of day.items || []) {
-      const itemLabel =
-        item.item_description || item.item_no || "Unknown Item";
-
-      if (
-        normalizedSearch &&
-        !normalize(itemLabel).includes(normalizedSearch)
-      ) {
-        continue;
-      }
-
-      const itemKey = String(item.item_no || itemLabel);
-
-      if (!itemMap.has(itemKey)) {
-        itemMap.set(itemKey, {
-          item_no: item.item_no,
-          item_description: itemLabel,
-          quantity: 0,
-          net_sales: 0,
-        });
-      }
-
-      const aggregateItem = itemMap.get(itemKey);
-
-      aggregateItem.quantity += Number(item.quantity || 0);
-      aggregateItem.net_sales += Number(item.net_sales || 0);
-    }
   }
 
-  const orders = receiptKeys.size;
   const reportingDays = dates.size || 1;
 
-  const storeDirectory = Array.from(storeMap.values()).map(
-    (store) => ({
-      ...store,
-      avg_order_value: store.orders
-        ? store.net_sales / store.orders
-        : 0,
-      avg_daily_sales: store.net_sales / reportingDays,
-    })
-  );
+  const storeDirectory = Array.from(
+    storeMap.values()
+  ).map((store) => ({
+    ...store,
+
+    avg_order_value: store.orders
+      ? store.net_sales / store.orders
+      : 0,
+
+    avg_daily_sales:
+      store.net_sales / reportingDays,
+
+    contribution_percent: netRevenue
+      ? (store.net_sales / netRevenue) * 100
+      : 0,
+  }));
 
   const itemRanking = Array.from(itemMap.values());
 
@@ -236,55 +257,101 @@ function aggregateFilteredDays(days, country, storeCode, search) {
     kpis: {
       netRevenue,
       orders,
-      avgOrderValue: orders ? netRevenue / orders : 0,
+
+      avgOrderValue: orders
+        ? netRevenue / orders
+        : 0,
+
       discounts,
+
       discountPercent: netRevenue
         ? (discounts / netRevenue) * 100
         : 0,
+
       itemsSold,
+
       activeStores: storeMap.size,
-      averageDailySales: netRevenue / reportingDays,
+
+      averageDailySales:
+        netRevenue / reportingDays,
+
       averageDailySalesPerOutlet:
         storeMap.size > 0
-          ? netRevenue / reportingDays / storeMap.size
+          ? netRevenue /
+            reportingDays /
+            storeMap.size
           : 0,
+
       rows: 0,
     },
 
-    revenueTrend: Array.from(revenueTrend.entries())
-      .map(([date, value]) => ({ date, value }))
-      .sort((a, b) => a.date.localeCompare(b.date)),
+    revenueTrend: Array.from(
+      revenueTrend.entries()
+    )
+      .map(([date, value]) => ({
+        date,
+        value,
+      }))
+      .sort((a, b) =>
+        a.date.localeCompare(b.date)
+      ),
 
     countrySales: sortDesc(
-      Array.from(countryMap.entries()).map(([name, value]) => ({
-        name,
-        value,
-      })),
+      Array.from(countryMap.entries()).map(
+        ([name, value]) => ({
+          name,
+          value,
+        })
+      ),
       "value"
     ),
 
     companySales: sortDesc(
-      Array.from(companyMap.entries()).map(([name, value]) => ({
-        name,
-        value,
-      })),
+      Array.from(companyMap.entries()).map(
+        ([name, value]) => ({
+          name,
+          value,
+        })
+      ),
       "value"
     ),
 
     salesTypeMix: sortDesc(
-      Array.from(salesTypeMap.entries()).map(([name, value]) => ({
-        name,
-        value,
-      })),
+      Array.from(salesTypeMap.entries()).map(
+        ([name, value]) => ({
+          name,
+          value,
+        })
+      ),
       "value"
     ),
 
-    storeDirectory: sortDesc(storeDirectory, "net_sales"),
-    topStores: sortDesc(storeDirectory, "net_sales").slice(0, 10),
-    bottomStores: sortAsc(storeDirectory, "net_sales").slice(0, 10),
-    topItems: sortDesc(itemRanking, "net_sales").slice(0, 10),
+    storeDirectory: sortDesc(
+      storeDirectory,
+      "net_sales"
+    ),
+
+    topStores: sortDesc(
+      storeDirectory,
+      "net_sales"
+    ).slice(0, 10),
+
+    bottomStores: sortAsc(
+      storeDirectory.filter(
+        (item) => item.net_sales > 0
+      ),
+      "net_sales"
+    ).slice(0, 10),
+
+    topItems: sortDesc(
+      itemRanking,
+      "net_sales"
+    ).slice(0, 10),
+
     bottomItems: sortAsc(
-      itemRanking.filter((item) => item.net_sales > 0),
+      itemRanking.filter(
+        (item) => item.net_sales > 0
+      ),
       "net_sales"
     ).slice(0, 10),
   };
