@@ -700,11 +700,11 @@ async function buildSummary() {
 
       /*
       |--------------------------------------------------------------------------
-      | Important: preserve signs
+      | LS Retail amounts and quantity
       |--------------------------------------------------------------------------
       |
-      | Do not use Math.abs() here.
-      | Negative refund rows must reduce net revenue and quantity.
+      | Normal rows are negative in LS Retail and are reversed below.
+      | Positive return/refund rows therefore reduce dashboard totals.
       |--------------------------------------------------------------------------
       */
 
@@ -716,22 +716,33 @@ async function buildSummary() {
         getField(row, "Discount Amount")
       );
 
-      const quantity = toNumber(
+      const quantityLocal = toNumber(
         getField(row, "Quantity")
       );
 
+      /*
+      |--------------------------------------------------------------------------
+      | LS Retail sign convention
+      |--------------------------------------------------------------------------
+      |
+      | Normal sales and quantities are stored as negative values.
+      | Reversing the sign displays normal sales as positive while positive
+      | return/refund rows reduce revenue and quantity.
+      |--------------------------------------------------------------------------
+      */
+
       const netSales =
-      toNumber(getField(row, "Net Amount")) * rate;
-      
+        -netAmountLocal * rate;
+
+      const quantity =
+        -quantityLocal;
+
+      // Display discount as a positive informational KPI.
       const discount =
-        discountLocal * rate;
+        Math.abs(discountLocal) * rate;
 
       const receiptNo = String(
         getField(row, "Receipt No_") || ""
-      ).trim();
-
-      const posTerminalNo = String(
-        getField(row, "POS Terminal No_") || ""
       ).trim();
 
       const transactionNo = String(
@@ -744,19 +755,10 @@ async function buildSummary() {
       |--------------------------------------------------------------------------
       */
 
-      const receiptKey =
-        receiptNo
-          ? [
-              storeCode,
-              posTerminalNo,
-              receiptNo,
-            ].join("|")
-          : [
-              storeCode,
-              posTerminalNo,
-              transactionNo,
-              date,
-            ].join("|");
+      // Match SQL COUNT(DISTINCT [Receipt No_]) within each store.
+      const receiptKey = receiptNo
+        ? `${storeCode}|${receiptNo}`
+        : `${storeCode}|${transactionNo}|${date}`;
 
       const itemNo = String(
         getField(row, "Item No_") || ""
