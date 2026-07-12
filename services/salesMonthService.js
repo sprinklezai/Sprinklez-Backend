@@ -1,60 +1,109 @@
-const fs = require("fs");
-const path = require("path");
+const {
+  getAvailableMonthValues,
+  getLatestAvailableDate,
+  hasMonthlySummary,
+  getDailySummariesForMonth,
+} = require("./salesFileService");
 
-const SUMMARY_PATH =
-  process.env.SALES_SUMMARY_PATH ||
-  path.join(__dirname, "..", "data", "sales", "summaries");
-
-function formatMonthLabel(value) {
-  const match = /^(\d{4})_(\d{2})$/.exec(value);
+function formatMonthLabel(
+  monthValue
+) {
+  const match =
+    /^(\d{4})_(\d{2})$/.exec(
+      monthValue
+    );
 
   if (!match) {
-    return value;
+    return monthValue;
   }
 
-  const year = Number(match[1]);
-  const month = Number(match[2]);
+  const year =
+    Number(match[1]);
 
-  return new Date(year, month - 1, 1).toLocaleDateString("en-US", {
-    month: "short",
-    year: "numeric",
-  });
+  const month =
+    Number(match[2]);
+
+  return new Date(
+    year,
+    month - 1,
+    1
+  ).toLocaleDateString(
+    "en-US",
+    {
+      month: "short",
+      year: "numeric",
+    }
+  );
 }
 
 function getAvailableSalesMonths() {
-  if (!fs.existsSync(SUMMARY_PATH)) {
-    throw new Error(`Sales summary folder not found: ${SUMMARY_PATH}`);
-  }
+  return getAvailableMonthValues()
+    .map((value) => {
+      const dailyFiles =
+        getDailySummariesForMonth(
+          value
+        );
 
-  const filePattern = /^(\d{4}_\d{2})_sales_summary\.json$/i;
-
-  return fs
-    .readdirSync(SUMMARY_PATH)
-    .map((fileName) => {
-      const match = filePattern.exec(fileName);
-
-      if (!match) {
-        return null;
-      }
-
-      const value = match[1];
+      const monthlyExists =
+        hasMonthlySummary(
+          value
+        );
 
       return {
         value,
-        label: formatMonthLabel(value),
-        fileName,
+
+        label:
+          formatMonthLabel(
+            value
+          ),
+
+        status:
+          dailyFiles.length > 0
+            ? "in_progress"
+            : monthlyExists
+              ? "closed"
+              : "in_progress",
+
+        hasMonthlySummary:
+          monthlyExists,
+
+        dailyFileCount:
+          dailyFiles.length,
       };
     })
-    .filter(Boolean)
-    .sort((a, b) => b.value.localeCompare(a.value));
+    .sort((a, b) =>
+      b.value.localeCompare(
+        a.value
+      )
+    );
 }
 
 function getLatestSalesMonth() {
-  const months = getAvailableSalesMonths();
-  return months[0]?.value || null;
+  return (
+    getAvailableSalesMonths()[
+      0
+    ]?.value || null
+  );
+}
+
+function getSalesAvailability() {
+  const months =
+    getAvailableSalesMonths();
+
+  return {
+    months,
+
+    latestMonth:
+      months[0]?.value ||
+      null,
+
+    latestAvailableDate:
+      getLatestAvailableDate(),
+  };
 }
 
 module.exports = {
   getAvailableSalesMonths,
   getLatestSalesMonth,
+  getSalesAvailability,
 };
