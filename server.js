@@ -10,6 +10,7 @@ const salesRoutes = require("./routes/salesRoutes");
 const testRoutes = require("./routes/testRoutes");
 const dataRoutes = require("./routes/dataRoutes");
 
+
 const app = express();
 
 const allowedOrigins = [
@@ -52,8 +53,6 @@ app.use("/api", overviewRoutes);
 app.use("/api", brandRoutes);
 app.use("/api", salesRoutes);
 app.use("/api", testRoutes);
-
-// Keep generic data routes last.
 app.use("/api", dataRoutes);
 
 // Return JSON for unexpected application errors.

@@ -1,27 +1,84 @@
 const express = require("express");
 const router = express.Router();
 
-const { getSalesDashboard, refreshSalesMonth } = require("../services/salesService");
+const {
+  getSalesDashboard,
+  refreshSalesMonth,
+} = require("../services/salesService");
+
+const {
+  getAvailableSalesMonths,
+  getLatestSalesMonth,
+} = require("../services/salesMonthService");
+
+/*
+|--------------------------------------------------------------------------
+| Available sales months
+|--------------------------------------------------------------------------
+|
+| GET /api/sales-months
+|--------------------------------------------------------------------------
+*/
+
+router.get("/sales-months", (req, res) => {
+  try {
+    const months = getAvailableSalesMonths();
+    const latestMonth = getLatestSalesMonth();
+
+    return res.json({
+      success: true,
+      latestMonth,
+      count: months.length,
+      months,
+    });
+  } catch (error) {
+    console.error("Sales months API error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load available sales months",
+      error: error.message,
+    });
+  }
+});
+
+/*
+|--------------------------------------------------------------------------
+| Sales dashboard
+|--------------------------------------------------------------------------
+|
+| GET /api/sales/:brandCode
+|--------------------------------------------------------------------------
+*/
 
 router.get("/sales/:brandCode", async (req, res) => {
   try {
     const { brandCode } = req.params;
-    const { month, period, country, store, search } = req.query;
+    const {
+      month,
+      period,
+      country,
+      store,
+      search,
+    } = req.query;
+
+    const selectedMonth =
+      month || getLatestSalesMonth() || "2026_06";
 
     const data = await getSalesDashboard({
       brandCode,
-      month: month || "2026_06",
+      month: selectedMonth,
       period: period || "MTD",
       country: country || "",
       store: store || "",
       search: search || "",
     });
 
-    res.json(data);
+    return res.json(data);
   } catch (error) {
     console.error("Sales API error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to load sales dashboard",
       error: error.message,
@@ -29,17 +86,29 @@ router.get("/sales/:brandCode", async (req, res) => {
   }
 });
 
+/*
+|--------------------------------------------------------------------------
+| Sales summary refresh check
+|--------------------------------------------------------------------------
+|
+| POST /api/sales-refresh?month=2026_06
+|--------------------------------------------------------------------------
+*/
+
 router.post("/sales-refresh", async (req, res) => {
   try {
-    const { month } = req.query;
+    const selectedMonth =
+      req.query.month ||
+      getLatestSalesMonth() ||
+      "2026_06";
 
-    const result = await refreshSalesMonth(month || "2026_06");
+    const result = await refreshSalesMonth(selectedMonth);
 
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     console.error("Sales refresh error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to refresh sales cache",
       error: error.message,
