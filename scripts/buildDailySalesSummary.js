@@ -8,7 +8,16 @@ require("dotenv").config({
   path: path.resolve(__dirname, "..", ".env"),
 });
 
-const month = process.argv[2] || "2026_06";
+const salesDate = process.argv[2];
+
+if (!/^\d{4}_\d{2}_\d{2}$/.test(String(salesDate || ""))) {
+  console.error("Usage: node scripts/buildDailySalesSummary.js YYYY_MM_DD");
+  console.error("Example: node scripts/buildDailySalesSummary.js 2026_07_11");
+  process.exit(1);
+}
+
+const month = salesDate.slice(0, 7);
+const expectedBusinessDate = salesDate.replace(/_/g, "-");
 
 const ROOT = path.resolve(__dirname, "..");
 
@@ -16,8 +25,8 @@ const SALES_ZIP = path.join(
   ROOT,
   "data",
   "sales",
-  "monthly",
-  `${month}_sales.zip`
+  "daily-zips",
+  `${salesDate}_sales.zip`
 );
 
 const MASTER_DIR =
@@ -28,22 +37,23 @@ const OUTPUT_DIR = path.join(
   ROOT,
   "data",
   "sales",
-  "summaries"
+  "daily",
+  month
 );
 
 const OUTPUT_FILE = path.join(
   OUTPUT_DIR,
-  `${month}_sales_summary.json`
+  `${salesDate}_sales_summary.json`
 );
 
 const MISSING_STORES_JSON = path.join(
   OUTPUT_DIR,
-  `${month}_missing_stores.json`
+  `${salesDate}_missing_stores.json`
 );
 
 const MISSING_STORES_CSV = path.join(
   OUTPUT_DIR,
-  `${month}_missing_stores.csv`
+  `${salesDate}_missing_stores.csv`
 );
 
 /*
@@ -600,7 +610,7 @@ async function buildSummary() {
 
   console.log("");
   console.log("======================================");
-  console.log(`Building sales summary: ${month}`);
+  console.log(`Building daily sales summary: ${expectedBusinessDate}`);
   console.log(`Sales ZIP: ${SALES_ZIP}`);
   console.log(`Master folder: ${MASTER_DIR}`);
   console.log("======================================");
@@ -692,6 +702,11 @@ async function buildSummary() {
         continue;
       }
 
+      if (date !== expectedBusinessDate) {
+        skippedDifferentDateCount += 1;
+        continue;
+      }
+
       includedRowCount += 1;
 
       const rate = getAedRate(
@@ -709,22 +724,35 @@ async function buildSummary() {
       */
 
       const netAmountLocal = toNumber(
-        getField(row, "Net Amount")
-      );
+  getField(row, "Net Amount")
+);
 
-      const discountLocal = toNumber(
-        getField(row, "Discount Amount")
-      );
+const discountLocal = toNumber(
+  getField(row, "Discount Amount")
+);
 
-      const quantity = toNumber(
-        getField(row, "Quantity")
-      );
+const quantityLocal = toNumber(
+  getField(row, "Quantity")
+);
 
-      const netSales =
-      toNumber(getField(row, "Net Amount")) * rate;
-      
-      const discount =
-        discountLocal * rate;
+/*
+|--------------------------------------------------------------------------
+| LS Retail sign conversion
+|--------------------------------------------------------------------------
+|
+| Normal sales and quantities are stored as negative values.
+| Reverse the sign for dashboard presentation.
+|--------------------------------------------------------------------------
+*/
+
+const netSales =
+  -netAmountLocal * rate;
+
+const quantity =
+  -quantityLocal;
+
+const discount =
+  Math.abs(discountLocal) * rate;
 
       const receiptNo = String(
         getField(row, "Receipt No_") || ""
