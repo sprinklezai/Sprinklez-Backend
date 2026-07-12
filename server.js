@@ -53,6 +53,8 @@ app.use("/api", overviewRoutes);
 app.use("/api", brandRoutes);
 app.use("/api", salesRoutes);
 app.use("/api", testRoutes);
+
+// Keep generic routes last.
 app.use("/api", dataRoutes);
 
 // Return JSON for unexpected application errors.
