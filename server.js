@@ -1,7 +1,7 @@
 require("dotenv").config();
 
 const express = require("express");
-const cors = require("cors");
+const cors = require("cors"); 
 
 const authRoutes = require("./routes/authRoutes");
 const overviewRoutes = require("./routes/overviewRoutes");
@@ -9,6 +9,7 @@ const brandRoutes = require("./routes/brandRoutes");
 const salesRoutes = require("./routes/salesRoutes");
 const testRoutes = require("./routes/testRoutes");
 const pnlRoutes = require("./routes/pnlRoutes");
+const executiveOverviewRoutes = require("./routes/executiveOverviewRoutes");
 const dataRoutes = require("./routes/dataRoutes");
 
 
@@ -56,6 +57,7 @@ app.use("/api", salesRoutes);
 app.use("/api", testRoutes);
 app.use("/api", pnlRoutes);
 // Keep generic routes last.
+app.use("/api", executiveOverviewRoutes);
 app.use("/api", dataRoutes);
 
 // Return JSON for unexpected application errors.
