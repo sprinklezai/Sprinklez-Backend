@@ -1,32 +1,137 @@
-const {
-  getPeriodBrandData,
-} = require("./salesPeriodService");
+const { getPeriodBrandData } = require("./salesPeriodService");
+const { getLatestSalesMonth } = require("./salesMonthService");
+const { getRevenueComparison } = require("./salesComparisonService");
 
-const {
-  getLatestSalesMonth,
-} = require("./salesMonthService");
+const normalize = (value) =>
+  String(value ?? "").trim().toUpperCase();
 
-const {
-  getRevenueComparison,
-} = require("./salesComparisonService");
-
-function normalize(value) {
-  return String(value ?? "").trim().toUpperCase();
-}
-
-function sortDesc(data, key) {
-  return [...data].sort(
-    (a, b) => Number(b[key] || 0) - Number(a[key] || 0)
+const sortDesc = (data, key) =>
+  [...data].sort(
+    (a, b) =>
+      Number(b[key] || 0) - Number(a[key] || 0)
   );
-}
 
-function sortAsc(data, key) {
-  return [...data].sort(
-    (a, b) => Number(a[key] || 0) - Number(b[key] || 0)
+const sortAsc = (data, key) =>
+  [...data].sort(
+    (a, b) =>
+      Number(a[key] || 0) - Number(b[key] || 0)
   );
+
+function filterDaysByDate(days, fromDate, toDate) {
+  return (days || []).filter((day) => {
+    const date = String(day.date || "");
+
+    return (
+      (!fromDate || date >= fromDate) &&
+      (!toDate || date <= toDate)
+    );
+  });
 }
 
-function aggregateFilteredDays(days, country, storeCode, search) {
+function buildExecutiveAlerts({
+  kpis,
+  topStores,
+  bottomStores,
+  salesTypeMix,
+  countrySales,
+}) {
+  const alerts = [];
+
+  if (Number(kpis.discountPercent || 0) >= 10) {
+    alerts.push({
+      type: "discount",
+      level: "warning",
+      message: `Discounts are ${Number(
+        kpis.discountPercent
+      ).toFixed(1)}% of revenue.`,
+    });
+  }
+
+  const topStore = topStores[0];
+
+  if (
+    topStore &&
+    Number(topStore.contribution_percent || 0) >= 20
+  ) {
+    alerts.push({
+      type: "store",
+      level: "warning",
+      message: `${topStore.store_name} contributes ${Number(
+        topStore.contribution_percent
+      ).toFixed(1)}% of revenue.`,
+    });
+  }
+
+  const bottomStore = bottomStores[0];
+
+  if (bottomStore) {
+    alerts.push({
+      type: "low-store",
+      level: "critical",
+      message: `${bottomStore.store_name} is the lowest-revenue active store.`,
+    });
+  }
+
+  const topChannel = salesTypeMix[0];
+
+  if (topChannel && Number(kpis.netRevenue || 0)) {
+    const share =
+      (Number(topChannel.value || 0) /
+        Number(kpis.netRevenue)) *
+      100;
+
+    alerts.push({
+      type: "channel",
+      level: "info",
+      message: `${topChannel.name} leads channel revenue at ${share.toFixed(
+        1
+      )}%.`,
+    });
+  }
+
+  const topCountry = countrySales[0];
+
+  if (topCountry && Number(kpis.netRevenue || 0)) {
+    const share =
+      (Number(topCountry.value || 0) /
+        Number(kpis.netRevenue)) *
+      100;
+
+    alerts.push({
+      type: "country",
+      level: "info",
+      message: `${topCountry.name} contributes ${share.toFixed(
+        1
+      )}% of revenue.`,
+    });
+  }
+
+  if (Number(kpis.avgOrderValue || 0) < 25) {
+    alerts.push({
+      type: "aov",
+      level: "warning",
+      message: "Average order value is below AED 25.",
+    });
+  }
+
+  if (alerts.length === 0) {
+    alerts.push({
+      type: "healthy",
+      level: "info",
+      message:
+        "No major exceptions detected for the selected period.",
+    });
+  }
+
+  return alerts;
+}
+
+function aggregateFilteredDays(
+  days,
+  country,
+  storeCode,
+  search
+) {
   const normalizedCountry = normalize(country);
   const normalizedStore = String(storeCode || "").trim();
   const normalizedSearch = normalize(search);
@@ -43,9 +148,12 @@ function aggregateFilteredDays(days, country, storeCode, search) {
   const storeMap = new Map();
   const itemMap = new Map();
   const revenueTrend = new Map();
+  const ordersTrend = new Map();
+  const aovTrend = new Map();
 
   for (const day of days || []) {
     let dayRevenue = 0;
+    let dayOrders = 0;
 
     for (const store of day.stores || []) {
       if (
@@ -57,7 +165,8 @@ function aggregateFilteredDays(days, country, storeCode, search) {
 
       if (
         normalizedStore &&
-        String(store.store_code).trim() !== normalizedStore
+        String(store.store_code || "").trim() !==
+          normalizedStore
       ) {
         continue;
       }
@@ -72,10 +181,15 @@ function aggregateFilteredDays(days, country, storeCode, search) {
       itemsSold += storeQuantity;
       orders += storeOrders;
       dayRevenue += storeRevenue;
+      dayOrders += storeOrders;
 
-      if (day.date) dates.add(day.date);
+      if (day.date) {
+        dates.add(day.date);
+      }
 
-      const storeKey = String(store.store_code || "").trim();
+      const storeKey = String(
+        store.store_code || ""
+      ).trim();
 
       if (!storeMap.has(storeKey)) {
         storeMap.set(storeKey, {
@@ -93,28 +207,37 @@ function aggregateFilteredDays(days, country, storeCode, search) {
       }
 
       const aggregateStore = storeMap.get(storeKey);
+
       aggregateStore.net_sales += storeRevenue;
       aggregateStore.discounts += storeDiscount;
       aggregateStore.quantity += storeQuantity;
       aggregateStore.orders += storeOrders;
 
       const countryName =
-        store.country_name || store.country_code || "Unknown";
+        store.country_name ||
+        store.country_code ||
+        "Unknown";
+
       const companyName =
-        store.company_name || store.company_code || "Unknown";
+        store.company_name ||
+        store.company_code ||
+        "Unknown";
 
       countryMap.set(
         countryName,
-        (countryMap.get(countryName) || 0) + storeRevenue
+        (countryMap.get(countryName) || 0) +
+          storeRevenue
       );
 
       companyMap.set(
         companyName,
-        (companyMap.get(companyName) || 0) + storeRevenue
+        (companyMap.get(companyName) || 0) +
+          storeRevenue
       );
 
       for (const channel of store.sales_types || []) {
         const channelName = channel.name || "UNKNOWN";
+
         salesTypeMap.set(
           channelName,
           (salesTypeMap.get(channelName) || 0) +
@@ -122,9 +245,20 @@ function aggregateFilteredDays(days, country, storeCode, search) {
         );
       }
 
-      for (const item of store.items || []) {
+      /*
+       * Items are normally stored under each store in the summary JSON.
+       * The day-level fallback is included for compatibility with any older
+       * summary files where items may be directly under the day object.
+       */
+      const storeItems = Array.isArray(store.items)
+        ? store.items
+        : [];
+
+      for (const item of storeItems) {
         const itemLabel =
-          item.item_description || item.item_no || "Unknown Item";
+          item.item_description ||
+          item.item_no ||
+          "Unknown Item";
 
         if (
           normalizedSearch &&
@@ -133,7 +267,9 @@ function aggregateFilteredDays(days, country, storeCode, search) {
           continue;
         }
 
-        const itemKey = String(item.item_no || itemLabel).trim();
+        const itemKey = String(
+          item.item_no || itemLabel
+        ).trim();
 
         if (!itemMap.has(itemKey)) {
           itemMap.set(itemKey, {
@@ -145,92 +281,243 @@ function aggregateFilteredDays(days, country, storeCode, search) {
         }
 
         const aggregateItem = itemMap.get(itemKey);
-        aggregateItem.quantity += Number(item.quantity || 0);
-        aggregateItem.net_sales += Number(item.net_sales || 0);
+
+        aggregateItem.quantity += Number(
+          item.quantity || 0
+        );
+
+        aggregateItem.net_sales += Number(
+          item.net_sales || 0
+        );
       }
     }
 
-    if (day.date && dayRevenue !== 0) {
+    /*
+     * Compatibility fallback for summaries that keep items directly under
+     * each day rather than inside individual stores.
+     */
+    for (const item of day.items || []) {
+      const itemLabel =
+        item.item_description ||
+        item.item_no ||
+        "Unknown Item";
+
+      if (
+        normalizedSearch &&
+        !normalize(itemLabel).includes(normalizedSearch)
+      ) {
+        continue;
+      }
+
+      const itemKey = String(
+        item.item_no || itemLabel
+      ).trim();
+
+      if (!itemMap.has(itemKey)) {
+        itemMap.set(itemKey, {
+          item_no: item.item_no,
+          item_description: itemLabel,
+          quantity: 0,
+          net_sales: 0,
+        });
+      }
+
+      const aggregateItem = itemMap.get(itemKey);
+
+      aggregateItem.quantity += Number(
+        item.quantity || 0
+      );
+
+      aggregateItem.net_sales += Number(
+        item.net_sales || 0
+      );
+    }
+
+    if (day.date) {
       revenueTrend.set(day.date, dayRevenue);
+      ordersTrend.set(day.date, dayOrders);
+      aovTrend.set(
+        day.date,
+        dayOrders > 0 ? dayRevenue / dayOrders : 0
+      );
     }
   }
 
   const reportingDays = dates.size || 1;
 
-  const storeDirectory = Array.from(storeMap.values()).map((store) => ({
+  const storeDirectory = Array.from(
+    storeMap.values()
+  ).map((store) => ({
     ...store,
+
     avg_order_value:
-      store.orders > 0 ? store.net_sales / store.orders : 0,
-    avg_daily_sales: store.net_sales / reportingDays,
+      store.orders > 0
+        ? store.net_sales / store.orders
+        : 0,
+
+    avg_daily_sales:
+      store.net_sales / reportingDays,
+
     contribution_percent:
-      netRevenue !== 0 ? (store.net_sales / netRevenue) * 100 : 0,
+      netRevenue !== 0
+        ? (store.net_sales / netRevenue) * 100
+        : 0,
   }));
 
   const itemRanking = Array.from(itemMap.values());
 
+  const countrySales = sortDesc(
+    Array.from(countryMap.entries()).map(
+      ([name, value]) => ({
+        name,
+        value,
+      })
+    ),
+    "value"
+  );
+
+  const companySales = sortDesc(
+    Array.from(companyMap.entries()).map(
+      ([name, value]) => ({
+        name,
+        value,
+      })
+    ),
+    "value"
+  );
+
+  const salesTypeMix = sortDesc(
+    Array.from(salesTypeMap.entries()).map(
+      ([name, value]) => ({
+        name,
+        value,
+      })
+    ),
+    "value"
+  );
+
+  const topStores = sortDesc(
+    storeDirectory,
+    "net_sales"
+  ).slice(0, 10);
+
+  const bottomStores = sortAsc(
+    storeDirectory.filter(
+      (item) => Number(item.net_sales || 0) > 0
+    ),
+    "net_sales"
+  ).slice(0, 10);
+
+  const kpis = {
+    netRevenue,
+    orders,
+
+    avgOrderValue:
+      orders > 0 ? netRevenue / orders : 0,
+
+    discounts,
+
+    discountPercent:
+      netRevenue !== 0
+        ? (discounts / netRevenue) * 100
+        : 0,
+
+    itemsSold,
+
+    activeStores: storeMap.size,
+
+    averageDailySales:
+      netRevenue / reportingDays,
+
+    averageDailySalesPerOutlet:
+      storeMap.size > 0
+        ? netRevenue /
+          reportingDays /
+          storeMap.size
+        : 0,
+
+    reportingDays,
+  };
+
   return {
-    kpis: {
-      netRevenue,
-      orders,
-      avgOrderValue: orders > 0 ? netRevenue / orders : 0,
-      discounts,
-      discountPercent:
-        netRevenue !== 0 ? (discounts / netRevenue) * 100 : 0,
-      itemsSold,
-      activeStores: storeMap.size,
-      averageDailySales: netRevenue / reportingDays,
-      averageDailySalesPerOutlet:
-        storeMap.size > 0
-          ? netRevenue / reportingDays / storeMap.size
-          : 0,
-      reportingDays,
-    },
+    kpis,
 
-    revenueTrend: Array.from(revenueTrend.entries())
-      .map(([date, value]) => ({ date, value }))
+    revenueTrend: Array.from(
+      revenueTrend.entries()
+    )
+      .map(([date, value]) => ({
+        date,
+        value,
+      }))
       .sort((a, b) =>
-        String(a.date).localeCompare(String(b.date))
+        a.date.localeCompare(b.date)
       ),
 
-    countrySales: sortDesc(
-      Array.from(countryMap.entries()).map(([name, value]) => ({
-        name,
+    ordersTrend: Array.from(
+      ordersTrend.entries()
+    )
+      .map(([date, value]) => ({
+        date,
         value,
-      })),
-      "value"
-    ),
-
-    companySales: sortDesc(
-      Array.from(companyMap.entries()).map(([name, value]) => ({
-        name,
-        value,
-      })),
-      "value"
-    ),
-
-    salesTypeMix: sortDesc(
-      Array.from(salesTypeMap.entries()).map(([name, value]) => ({
-        name,
-        value,
-      })),
-      "value"
-    ),
-
-    storeDirectory: sortDesc(storeDirectory, "net_sales"),
-    topStores: sortDesc(storeDirectory, "net_sales").slice(0, 10),
-    bottomStores: sortAsc(
-      storeDirectory.filter(
-        (item) => Number(item.net_sales || 0) > 0
+      }))
+      .sort((a, b) =>
+        a.date.localeCompare(b.date)
       ),
+
+    avgOrderValueTrend: Array.from(
+      aovTrend.entries()
+    )
+      .map(([date, value]) => ({
+        date,
+        value,
+      }))
+      .sort((a, b) =>
+        a.date.localeCompare(b.date)
+      ),
+
+    countrySales,
+    companySales,
+    salesTypeMix,
+
+    storeDirectory: sortDesc(
+      storeDirectory,
+      "net_sales"
+    ),
+
+    topStores,
+    bottomStores,
+
+    topItemsByRevenue: sortDesc(
+      itemRanking,
       "net_sales"
     ).slice(0, 10),
-    topItems: sortDesc(itemRanking, "net_sales").slice(0, 10),
-    bottomItems: sortAsc(
+
+    topItemsByQuantity: sortDesc(
+      itemRanking,
+      "quantity"
+    ).slice(0, 10),
+
+    bottomItemsByRevenue: sortAsc(
       itemRanking.filter(
         (item) => Number(item.net_sales || 0) > 0
       ),
       "net_sales"
     ).slice(0, 10),
+
+    bottomItemsByQuantity: sortAsc(
+      itemRanking.filter(
+        (item) => Number(item.quantity || 0) > 0
+      ),
+      "quantity"
+    ).slice(0, 10),
+
+    executiveAlerts: buildExecutiveAlerts({
+      kpis,
+      topStores,
+      bottomStores,
+      salesTypeMix,
+      countrySales,
+    }),
   };
 }
 
@@ -244,10 +531,13 @@ async function getSalesDashboard({
   fromDate = "",
   toDate = "",
 }) {
-  const selectedMonth = month || getLatestSalesMonth();
+  const selectedMonth =
+    month || getLatestSalesMonth();
 
   if (!selectedMonth) {
-    throw new Error("No sales summary data is available");
+    throw new Error(
+      "No sales summary data is available"
+    );
   }
 
   const normalizedBrandCode = normalize(brandCode);
@@ -265,8 +555,14 @@ async function getSalesDashboard({
     );
   }
 
-  const aggregated = aggregateFilteredDays(
+  const dateFilteredDays = filterDaysByDate(
     periodData.days || [],
+    fromDate,
+    toDate
+  );
+
+  const aggregated = aggregateFilteredDays(
+    dateFilteredDays,
     country,
     store,
     search
@@ -281,12 +577,17 @@ async function getSalesDashboard({
     store,
   });
 
-  const storeOptions = (periodData.selectedBrand.stores || [])
+  const storeOptions = (
+    periodData.selectedBrand.stores || []
+  )
     .filter((item) => {
-      if (!country) return true;
+      if (!country) {
+        return true;
+      }
 
       return (
-        normalize(item.country_name) === normalize(country)
+        normalize(item.country_name) ===
+        normalize(country)
       );
     })
     .map((item) => ({
@@ -302,35 +603,63 @@ async function getSalesDashboard({
 
   return {
     success: true,
+
     brandCode: normalizedBrandCode,
+
     brandName:
-      periodData.selectedBrand.brandName || normalizedBrandCode,
+      periodData.selectedBrand.brandName ||
+      normalizedBrandCode,
+
     month: selectedMonth,
     period: normalizedPeriod,
+
     currency:
-      periodData.selectedSummary?.currency || "AED",
+      periodData.selectedSummary?.currency ||
+      "AED",
 
     periodInfo: {
       type: normalizedPeriod,
       selectedMonth,
-      includedMonths: periodData.includedMonths || [],
-      includedFiles: periodData.includedFiles || [],
-      sourceByMonth: periodData.sourceByMonth || {},
-      startDate: periodData.startDate || null,
-      endDate: periodData.endDate || null,
+
+      includedMonths:
+        periodData.includedMonths || [],
+
+      includedFiles:
+        periodData.includedFiles || [],
+
+      sourceByMonth:
+        periodData.sourceByMonth || {},
+
+      requestedFromDate:
+        fromDate || null,
+
+      requestedToDate:
+        toDate || null,
+
+      startDate:
+        dateFilteredDays[0]?.date || null,
+
+      endDate:
+        dateFilteredDays[
+          dateFilteredDays.length - 1
+        ]?.date || null,
     },
 
     filters: {
       countries: [
-        ...(periodData.selectedBrand.countries || []),
+        ...(periodData.selectedBrand.countries ||
+          []),
       ].sort(),
+
       stores: storeOptions,
+
       periods: ["WTD", "MTD", "YTD"],
     },
 
     revenueComparison: {
       ...revenueComparison,
-      regionRevenue: aggregated.countrySales || [],
+      regionRevenue:
+        aggregated.countrySales || [],
     },
 
     ...aggregated,
@@ -338,10 +667,13 @@ async function getSalesDashboard({
 }
 
 async function refreshSalesMonth(month) {
-  const selectedMonth = month || getLatestSalesMonth();
+  const selectedMonth =
+    month || getLatestSalesMonth();
 
   if (!selectedMonth) {
-    throw new Error("No sales summary data is available");
+    throw new Error(
+      "No sales summary data is available"
+    );
   }
 
   return {
