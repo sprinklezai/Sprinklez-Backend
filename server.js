@@ -8,6 +8,7 @@ const overviewRoutes = require("./routes/overviewRoutes");
 const brandRoutes = require("./routes/brandRoutes");
 const salesRoutes = require("./routes/salesRoutes");
 const testRoutes = require("./routes/testRoutes");
+const pnlRoutes = require("./routes/pnlRoutes");
 const dataRoutes = require("./routes/dataRoutes");
 
 
@@ -53,7 +54,7 @@ app.use("/api", overviewRoutes);
 app.use("/api", brandRoutes);
 app.use("/api", salesRoutes);
 app.use("/api", testRoutes);
-
+app.use("/api", pnlRoutes);
 // Keep generic routes last.
 app.use("/api", dataRoutes);
 

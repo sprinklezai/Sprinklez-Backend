@@ -1,6 +1,7 @@
 const { getPeriodBrandData } = require("./salesPeriodService");
 const { getLatestSalesMonth } = require("./salesMonthService");
 const { getRevenueComparison } = require("./salesComparisonService");
+const { buildManagementSummary } = require("./managementSummaryService");
 
 const normalize = (value) =>
   String(value ?? "").trim().toUpperCase();
@@ -150,6 +151,7 @@ function aggregateFilteredDays(
   const revenueTrend = new Map();
   const ordersTrend = new Map();
   const aovTrend = new Map();
+  const hourlyMap = new Map();
 
   for (const day of days || []) {
     let dayRevenue = 0;
@@ -253,6 +255,18 @@ function aggregateFilteredDays(
       const storeItems = Array.isArray(store.items)
         ? store.items
         : [];
+
+
+      for (const hourItem of store.hourly_sales || []) {
+        const hour = String(hourItem.hour ?? "").padStart(2, "0");
+        if (!hourlyMap.has(hour)) {
+          hourlyMap.set(hour, { hour, net_sales: 0, orders: 0, quantity: 0 });
+        }
+        const aggregateHour = hourlyMap.get(hour);
+        aggregateHour.net_sales += Number(hourItem.net_sales || 0);
+        aggregateHour.orders += Number(hourItem.orders || 0);
+        aggregateHour.quantity += Number(hourItem.quantity || 0);
+      }
 
       for (const item of storeItems) {
         const itemLabel =
@@ -475,6 +489,15 @@ function aggregateFilteredDays(
         a.date.localeCompare(b.date)
       ),
 
+    hourlySalesTrend: Array.from(hourlyMap.values())
+      .map((item) => ({
+        ...item,
+        avg_order_value: Number(item.orders || 0) > 0
+          ? Number(item.net_sales || 0) / Number(item.orders || 0)
+          : 0,
+      }))
+      .sort((a, b) => String(a.hour).localeCompare(String(b.hour))),
+
     countrySales,
     companySales,
     salesTypeMix,
@@ -577,6 +600,21 @@ async function getSalesDashboard({
     store,
   });
 
+  const managementSummary = buildManagementSummary({
+    brandName: periodData.selectedBrand.brandName || normalizedBrandCode,
+    period: normalizedPeriod,
+    periodInfo: {
+      startDate: dateFilteredDays[0]?.date || null,
+      endDate: dateFilteredDays[dateFilteredDays.length - 1]?.date || null,
+    },
+    kpis: aggregated.kpis,
+    countrySales: aggregated.countrySales,
+    salesTypeMix: aggregated.salesTypeMix,
+    topStores: aggregated.topStores,
+    bottomStores: aggregated.bottomStores,
+    currency: periodData.selectedSummary?.currency || "AED",
+  });
+
   const storeOptions = (
     periodData.selectedBrand.stores || []
   )
@@ -655,6 +693,8 @@ async function getSalesDashboard({
 
       periods: ["WTD", "MTD", "YTD"],
     },
+
+    managementSummary,
 
     revenueComparison: {
       ...revenueComparison,
