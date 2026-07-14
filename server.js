@@ -10,6 +10,7 @@ const salesRoutes = require("./routes/salesRoutes");
 const testRoutes = require("./routes/testRoutes");
 const pnlRoutes = require("./routes/pnlRoutes");
 const executiveOverviewRoutes = require("./routes/executiveOverviewRoutes");
+const salesChatRoutes = require("./routes/salesChatRoutes");
 const dataRoutes = require("./routes/dataRoutes");
 
 
@@ -58,6 +59,7 @@ app.use("/api", testRoutes);
 app.use("/api", pnlRoutes);
 // Keep generic routes last.
 app.use("/api", executiveOverviewRoutes);
+app.use("/api", salesChatRoutes);
 app.use("/api", dataRoutes);
 
 // Return JSON for unexpected application errors.
